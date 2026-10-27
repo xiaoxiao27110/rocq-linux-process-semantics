@@ -481,6 +481,14 @@ Definition exec (sz : word) (i : instr) (c : core) : eff :=
       let base := if is_page then bv_and pc (Z_to_bv 64 (-4096)) else pc in
       EDone (rset_xzr rd true (base + imm) cn)
 
+  | A64_LoadLiteral msz is_signed rt offset =>
+      (* PC-relative load: LDR Wt (zero-extends), LDR Xt, LDRSW Xt (sign-extends). *)
+      let addr := pc + offset in
+      if negb (mem_aligned msz addr) then EFault c
+      else
+        let dst_sf := if is_signed then true else match msz with SZ8 => true | _ => false end in
+        load_a64 msz is_signed true addr (λ v, EDone (rset_xzr rt dst_sf v cn))
+
   | A64_Bitfield sf opc rd rn immr imms =>
       let res := exec_bitfield sf opc (rget_xzr c rn sf) (rget_xzr c rd sf) immr imms in
       EDone (rset_xzr rd sf res cn)

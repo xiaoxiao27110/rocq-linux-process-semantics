@@ -45,6 +45,7 @@ Inductive instr : Type :=
 | A64_LogicalImm (sf : bool) (opc : bv 2) (rd rn : reg) (bmask : word)
 | A64_MoveWide (sf : bool) (opc : bv 2) (rd : reg) (imm16 : bv 16) (hw : bv 2)
 | A64_Adr (is_page : bool) (rd : reg) (imm : word)
+| A64_LoadLiteral (sz : msize) (is_signed : bool) (rt : reg) (offset : word)  (* LDR (literal) W/X, LDRSW (literal) *)
 | A64_Bitfield (sf : bool) (opc : bv 2) (rd rn : reg) (immr imms : bv 6)
 | A64_Extract (sf : bool) (rd rn rm : reg) (imms : bv 6)
 | A64_AddSubShifted (sf is_sub setflags : bool) (shift_ty : bv 2) (rd rn rm : reg) (imm6 : bv 6)
