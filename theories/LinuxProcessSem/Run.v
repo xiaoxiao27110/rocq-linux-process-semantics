@@ -174,7 +174,7 @@ Fixpoint apply_copies (before mem : word -> option byte) (cs : list MemCopy)
     unmaps) or shrinks (unmaps, no zeros).) *)
 Definition apply_effect (ms : machine_state) (eff : SyscallEffect)
     : machine_state :=
-  let ms' := set_reg ms 10 (eff_ret eff) in
+  let ms' := set_reg ms 0 (eff_ret eff) in
   {| ms_regs := ms_regs ms'; ms_fregs := ms_fregs ms';
      ms_pc_val := ms_pc_val ms';
      ms_svc_pending := ms_svc_pending ms';
@@ -1058,8 +1058,8 @@ Qed.
 Definition init_machine_state (argv : list (list byte))
     (envp : list (list byte)) (uid : word) (hwcap : word) : machine_state :=
   let regs :=
-    bvmap_set 2 mi_init_sp                 (* sp *)
-      (bvmap_set 10 (Z_to_bv 64 0)         (* a0 — 0 on Linux entry; the entry is
+    bvmap_set 31 mi_init_sp                (* sp *)
+      (bvmap_set 0 (Z_to_bv 64 0)          (* x0 — 0 on Linux entry; the entry is
                                               redundant (missing keys read as 0)
                                               but register-file proofs match on
                                               the map shape, so keep it *)

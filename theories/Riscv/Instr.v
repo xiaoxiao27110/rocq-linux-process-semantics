@@ -1,20 +1,14 @@
-(** * Instr: the RV64GC base instruction AST.
-
-    Design rules:
-    - Immediates are kept at their *encoded* width with the sign bit
-      included (I/S: 12 bits, B: 13, U: 20, J: 21); interpretation
-      (sign-extension, shifting) is deferred to the semantics.
-    - Compressed instructions have their own AST in [DecodeC] and are
-      expanded into this AST, so the execution semantics is written once. *)
+(** * Instr: ARMv8.0-A (AArch64 / Phytium D2000) instruction AST
+    (preserving legacy RV64 constructors for Common proof-library compatibility). *)
 
 From LinuxProcessSemantics.Riscv Require Import Prelude.
 
-(** Integer register-register ops (OP / OP-32 major opcodes). *)
+(** Integer register-register ops. *)
 Inductive aluop : Type :=
 | ALU_ADD | ALU_SUB | ALU_SLL | ALU_SLT | ALU_SLTU
 | ALU_XOR | ALU_SRL | ALU_SRA | ALU_OR | ALU_AND.
 
-(** M extension ops. *)
+(** Multiply/divide ops. *)
 Inductive mulop : Type :=
 | M_MUL | M_MULH | M_MULHSU | M_MULHU
 | M_DIV | M_DIVU | M_REM | M_REMU.
@@ -30,63 +24,80 @@ Inductive amoop : Type :=
 | AMO_SWAP | AMO_ADD | AMO_XOR | AMO_AND | AMO_OR
 | AMO_MIN | AMO_MAX | AMO_MINU | AMO_MAXU.
 
-Inductive awidth : Type := AW | AD.  (** .w / .d *)
+Inductive awidth : Type := AW | AD.
 
 (** Zicsr. *)
 Inductive csrop : Type := CSR_RW | CSR_RS | CSR_RC.
 
 (** F/D formats and op groups. *)
 Inductive ffmt : Type := FMT_S | FMT_D.
-
 Inductive fariop : Type := F_ADD | F_SUB | F_MUL | F_DIV.
 Inductive fmaop : Type := F_MADD | F_MSUB | F_NMSUB | F_NMADD.
 Inductive fsgnop : Type := F_SGNJ | F_SGNJN | F_SGNJX.
 Inductive fminmaxop : Type := F_MIN | F_MAX.
 Inductive fcmpop : Type := F_EQ | F_LT | F_LE.
-
-(** Operand kind of an [Fcvt]: integer (32/64, signed/unsigned) or FP
-    format.  Decoding only produces the architecturally valid pairs. *)
-Inductive fcvt_ty : Type :=
-| FC_W | FC_WU | FC_L | FC_LU  (** integer targets/sources *)
-| FC_S | FC_D.                 (** FP formats *)
-
-(** fmv.x.w / fmv.w.x / fmv.x.d / fmv.d.x: direction of the raw move. *)
+Inductive fcvt_ty : Type := FC_W | FC_WU | FC_L | FC_LU | FC_S | FC_D.
 Inductive fmvdir : Type := FMV_X_F | FMV_F_X.
 
 Inductive instr : Type :=
-(* RV32I / RV64I *)
+(* ---- ARMv8.0-A (AArch64) instructions ---- *)
+| A64_AddSubImm (sf is_sub setflags : bool) (rd rn : reg) (imm : word)
+| A64_LogicalImm (sf : bool) (opc : bv 2) (rd rn : reg) (bmask : word)
+| A64_MoveWide (sf : bool) (opc : bv 2) (rd : reg) (imm16 : bv 16) (hw : bv 2)
+| A64_Adr (is_page : bool) (rd : reg) (imm : word)
+| A64_Bitfield (sf : bool) (opc : bv 2) (rd rn : reg) (immr imms : bv 6)
+| A64_Extract (sf : bool) (rd rn rm : reg) (imms : bv 6)
+| A64_AddSubShifted (sf is_sub setflags : bool) (shift_ty : bv 2) (rd rn rm : reg) (imm6 : bv 6)
+| A64_AddSubExtended (sf is_sub setflags : bool) (option_ty : bv 3) (rd rn rm : reg) (imm3 : bv 3)
+| A64_AddSubCarry (sf is_sub setflags : bool) (rd rn rm : reg)
+| A64_LogicalShifted (sf : bool) (opc : bv 2) (inv_rm : bool) (shift_ty : bv 2) (rd rn rm : reg) (imm6 : bv 6)
+| A64_CondSelect (sf op o2 : bool) (cond : bv 4) (rd rn rm : reg)
+| A64_CondCompare (sf is_sub is_imm : bool) (cond : bv 4) (rn rm_or_imm : reg) (nzcv_imm : bv 4)
+| A64_DataProc2 (sf : bool) (opcode : bv 6) (rd rn rm : reg)
+| A64_DataProc1 (sf : bool) (opcode : bv 6) (rd rn : reg)
+| A64_DataProc3 (sf : bool) (op54 : bv 2) (op31 : bv 3) (o0 : bool) (rd rn rm ra : reg)
+| A64_BImm (is_link : bool) (offset : word)
+| A64_BReg (op : bv 2) (rn : reg)
+| A64_BCond (cond : bv 4) (offset : word)
+| A64_CBZ (sf is_nz : bool) (rt : reg) (offset : word)
+| A64_TBZ (is_nz : bool) (rt : reg) (bit_pos : bv 6) (offset : word)
+| A64_LoadStoreImm (sz : msize) (is_load is_signed simm_64 wback postindex : bool) (rt rn : reg) (offset : word)
+| A64_LoadStoreReg (sz : msize) (is_load is_signed simm_64 : bool) (option_ty : bv 3) (s_scale : bool) (rt rn rm : reg)
+| A64_LoadStorePair (sz : msize) (is_load is_signed wback postindex : bool) (rt rt2 rn : reg) (offset : word)
+| A64_LoadStoreExcl (sz : msize) (is_load : bool) (rs rt rn : reg)
+| A64_Nop
+| A64_MrsTpidr (rt : reg)
+| A64_MsrTpidr (rt : reg)
+| A64_Svc (imm16 : bv 16)
+| A64_Brk (imm16 : bv 16)
+| A64_Udf (imm16 : bv 16)
+(* ---- Legacy constructors kept for Common proof-library compatibility ---- *)
 | Lui (rd : reg) (imm : bv 20)
 | Auipc (rd : reg) (imm : bv 20)
-| Jal (rd : reg) (imm : bv 21)               (* bit 0 of imm is always 0 *)
+| Jal (rd : reg) (imm : bv 21)
 | Jalr (rd rs1 : reg) (imm : bv 12)
-| Branch (c : branch_cond) (rs1 rs2 : reg) (imm : bv 13)  (* bit 0 always 0 *)
+| Branch (c : branch_cond) (rs1 rs2 : reg) (imm : bv 13)
 | Load (sz : msize) (signed : bool) (rd rs1 : reg) (imm : bv 12)
-| Store (sz : msize) (rs1 rs2 : reg) (imm : bv 12)  (* mem[rs1+imm] <- rs2 *)
+| Store (sz : msize) (rs1 rs2 : reg) (imm : bv 12)
 | OpImm (op : aluop) (rd rs1 : reg) (imm : bv 12)
-    (* addi/slti/sltiu/xori/ori/andi; never SUB/shift *)
-| ShiftImm (op : aluop) (rd rs1 : reg) (shamt : bv 6)   (* slli/srli/srai *)
+| ShiftImm (op : aluop) (rd rs1 : reg) (shamt : bv 6)
 | Op (op : aluop) (rd rs1 rs2 : reg)
-| OpImm32 (rd rs1 : reg) (imm : bv 12)                  (* addiw *)
-| ShiftImm32 (op : aluop) (rd rs1 : reg) (shamt : bv 5) (* slliw/srliw/sraiw *)
-| Op32 (op : aluop) (rd rs1 rs2 : reg)  (* addw/subw/sllw/srlw/sraw *)
+| OpImm32 (rd rs1 : reg) (imm : bv 12)
+| ShiftImm32 (op : aluop) (rd rs1 : reg) (shamt : bv 5)
+| Op32 (op : aluop) (rd rs1 rs2 : reg)
 | Fence (fm : bv 4) (pred succ : bv 4) (rd rs1 : reg)
 | FenceI (rd rs1 : reg) (imm : bv 12)
 | Ecall
 | Ebreak
-(* M *)
 | Mul (op : mulop) (rd rs1 rs2 : reg)
-| Mul32 (op : mulop) (rd rs1 rs2 : reg)  (* mulw/divw/divuw/remw/remuw *)
-(* A *)
+| Mul32 (op : mulop) (rd rs1 rs2 : reg)
 | Lr (w : awidth) (aq rl : bool) (rd rs1 : reg)
 | Sc (w : awidth) (aq rl : bool) (rd rs1 rs2 : reg)
 | Amo (op : amoop) (w : awidth) (aq rl : bool) (rd rs1 rs2 : reg)
-(* Zicsr *)
 | Csr (op : csrop) (rd rs1 : reg) (csr : bv 12)
 | CsrI (op : csrop) (rd : reg) (uimm : bv 5) (csr : bv 12)
-(* F/D loads/stores (rd/rs2 name FP registers) *)
 | FLoad (fmt : ffmt) (rd rs1 : reg) (imm : bv 12)
 | FStore (fmt : ffmt) (rs1 rs2 : reg) (imm : bv 12)
-(* F/D computation *)
 | Fma (op : fmaop) (fmt : ffmt) (rd rs1 rs2 rs3 : reg) (rm : bv 3)
 | Fari (op : fariop) (fmt : ffmt) (rd rs1 rs2 : reg) (rm : bv 3)
 | Fsqrt (fmt : ffmt) (rd rs1 : reg) (rm : bv 3)
@@ -96,39 +107,6 @@ Inductive instr : Type :=
 | Fcvt (dst src : fcvt_ty) (rd rs1 : reg) (rm : bv 3)
 | Fmv (dir : fmvdir) (fmt : ffmt) (rd rs1 : reg)
 | Fclass (fmt : ffmt) (rd rs1 : reg).
-
-#[global] Instance aluop_eq_dec : EqDecision aluop.
-Proof. solve_decision. Defined.
-#[global] Instance mulop_eq_dec : EqDecision mulop.
-Proof. solve_decision. Defined.
-#[global] Instance branch_cond_eq_dec : EqDecision branch_cond.
-Proof. solve_decision. Defined.
-#[global] Instance msize_eq_dec : EqDecision msize.
-Proof. solve_decision. Defined.
-#[global] Instance amoop_eq_dec : EqDecision amoop.
-Proof. solve_decision. Defined.
-#[global] Instance awidth_eq_dec : EqDecision awidth.
-Proof. solve_decision. Defined.
-#[global] Instance csrop_eq_dec : EqDecision csrop.
-Proof. solve_decision. Defined.
-#[global] Instance ffmt_eq_dec : EqDecision ffmt.
-Proof. solve_decision. Defined.
-#[global] Instance fariop_eq_dec : EqDecision fariop.
-Proof. solve_decision. Defined.
-#[global] Instance fmaop_eq_dec : EqDecision fmaop.
-Proof. solve_decision. Defined.
-#[global] Instance fsgnop_eq_dec : EqDecision fsgnop.
-Proof. solve_decision. Defined.
-#[global] Instance fminmaxop_eq_dec : EqDecision fminmaxop.
-Proof. solve_decision. Defined.
-#[global] Instance fcmpop_eq_dec : EqDecision fcmpop.
-Proof. solve_decision. Defined.
-#[global] Instance fcvt_ty_eq_dec : EqDecision fcvt_ty.
-Proof. solve_decision. Defined.
-#[global] Instance fmvdir_eq_dec : EqDecision fmvdir.
-Proof. solve_decision. Defined.
-#[global] Instance instr_eq_dec : EqDecision instr.
-Proof. solve_decision. Defined.
 
 Definition msize_bytes (sz : msize) : Z :=
   match sz with SZ1 => 1 | SZ2 => 2 | SZ4 => 4 | SZ8 => 8 end.

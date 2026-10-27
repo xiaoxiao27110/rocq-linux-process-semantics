@@ -38,3 +38,7 @@ theories/Examples/*/*_code.v
 # Python
 __pycache__/
 *.pyc
+
+# Local reference repositories
+/references/
+.DS_Store

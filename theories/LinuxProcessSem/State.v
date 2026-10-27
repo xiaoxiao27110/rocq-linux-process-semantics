@@ -634,7 +634,7 @@ Record SyscallEffect := mkEffectU {
 }.
 
 (** The common no-unmap/no-copy/no-copyin domain convenience. *)
-Abbreviation mkEffect r ws zs := (mkEffectU r ws zs [] [] []).
+Notation mkEffect r ws zs := (mkEffectU r ws zs [] [] []) (only parsing).
 
 Definition with_copyins (reads : list (word * nat)) (eff : SyscallEffect)
     : SyscallEffect :=

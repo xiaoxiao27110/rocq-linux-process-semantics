@@ -110,30 +110,29 @@ Record machine_state := {
 
 Definition ms_pc (st : machine_state) : word := st.(ms_pc_val).
 
-Definition ms_sp (st : machine_state) : word := reg_get st.(ms_regs) 2.
+Definition ms_sp (st : machine_state) : word := reg_get st.(ms_regs) 31.
 
-(** [ms_gpr st i] returns the i-th syscall argument register (a0–a5).
-    Maps argument index to physical register: arg i → x(10+i). *)
+(** [ms_gpr st i] returns the i-th syscall argument register (x0–x5).
+    Maps argument index to physical register: arg i → x(i). *)
 Definition ms_gpr (st : machine_state) (i : nat) : word :=
-  reg_get st.(ms_regs) (Z_to_bv 5 (10 + Z.of_nat i)).
+  reg_get st.(ms_regs) (Z_to_bv 5 (Z.of_nat i)).
 
-(** Read physical register by number (x0 reads as 0). *)
+(** Read physical register by number (x0..x30, 31=sp). *)
 Definition ms_reg (st : machine_state) (r : reg) : word :=
-  if bv_eqb r 0 then Z_to_bv 64 0 else reg_get st.(ms_regs) r.
+  reg_get st.(ms_regs) r.
 
-(** Update a physical register. x0 writes are silently discarded. *)
+(** Update a physical register. *)
 Definition set_reg (st : machine_state) (r : reg) (v : word) : machine_state :=
-  if bv_eqb r 0 then st
-  else {| ms_regs := bvmap_set r v st.(ms_regs); ms_fregs := st.(ms_fregs);
-          ms_pc_val := st.(ms_pc_val);
-          ms_svc_pending := st.(ms_svc_pending);
-          ms_resv := st.(ms_resv); ms_fcsr := st.(ms_fcsr);
-          ms_mem := st.(ms_mem);
-          ms_rom := st.(ms_rom) |}.
+  {| ms_regs := bvmap_set r v st.(ms_regs); ms_fregs := st.(ms_fregs);
+     ms_pc_val := st.(ms_pc_val);
+     ms_svc_pending := st.(ms_svc_pending);
+     ms_resv := st.(ms_resv); ms_fcsr := st.(ms_fcsr);
+     ms_mem := st.(ms_mem);
+     ms_rom := st.(ms_rom) |}.
 
-(** Set a0 (= x10), the syscall return register. *)
+(** Set x0 (= reg 0), the syscall return register. *)
 Definition set_gpr0 (ms : machine_state) (ret : word) : machine_state :=
-  set_reg ms 10 ret.
+  set_reg ms 0 ret.
 
 (** Write [data] byte-by-byte into [mem] starting at [addr]. *)
 Fixpoint write_to_mem (mem : word -> option byte) (addr : word)
@@ -145,11 +144,11 @@ Fixpoint write_to_mem (mem : word -> option byte) (addr : word)
                  (addr + 1) rest
   end.
 
-(** Set a0 to [ret] and write [data] into memory at [buf_addr] — the
+(** Set x0 to [ret] and write [data] into memory at [buf_addr] — the
     post-state of a syscall that returns a value and fills a caller buffer. *)
 Definition set_gpr0_write_buf (ms : machine_state) (ret : word)
     (buf_addr : word) (data : list byte) : machine_state :=
-  let ms' := set_reg ms 10 ret in
+  let ms' := set_reg ms 0 ret in
   {| ms_regs := ms_regs ms'; ms_fregs := ms_fregs ms';
      ms_pc_val := ms_pc_val ms';
      ms_svc_pending := ms_svc_pending ms';
@@ -744,7 +743,7 @@ Definition fetch_tail_any (m : word -> option byte) (addr : word)
     instruction can never alias this test: the low 2 bits of 0x73 are
     11, the uncompressed marker.) *)
 Definition is_ecall (w : bv 32) : bool :=
-  bv_eqb w (Z_to_bv 32 0x73).
+  bv_eqb w (Z_to_bv 32 0xd4000001).
 
 (** ** ISA-semantics integration
 
@@ -877,6 +876,8 @@ Fixpoint interp_eff_accesses (t : eff) (m : word -> option byte)
   | EEbreak _ | EFault _ | EDefinedIllegal _ => MachineFault
   | EIllegal _ | EEcall _ => MachineUnmodeled
   | ELoad n a k =>
+      if negb (Z.eqb (bv_unsigned a mod width_bytesZ n) 0)%Z then MachineFault
+      else
       match ov_read_bytes m a (width_bytes n) with
       | Some bs =>
         match interp_eff_accesses
@@ -891,7 +892,8 @@ Fixpoint interp_eff_accesses (t : eff) (m : word -> option byte)
       | None => MachineFault
       end
   | EStore n a v k =>
-      if store_ok m a (width_bytes n)
+      if negb (Z.eqb (bv_unsigned a mod width_bytesZ n) 0)%Z then MachineFault
+      else if store_ok m a (width_bytes n)
       then
         match interp_eff_accesses k
                 (write_to_mem m a
@@ -959,7 +961,7 @@ Definition decode_exec_accesses (st : machine_state) (w : bv 32)
     MachineOk (mkAccessReport
       {| ms_regs := ms_regs st; ms_fregs := ms_fregs st;
          ms_pc_val := ms_pc_val st;
-         ms_svc_pending := Some (ms_reg st 17);
+         ms_svc_pending := Some (ms_reg st 8);
          ms_resv := ms_resv st; ms_fcsr := ms_fcsr st;
          ms_mem := st.(ms_mem);
          ms_rom := st.(ms_rom) |} [])

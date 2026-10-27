@@ -8,8 +8,8 @@ From Stdlib Require Export ZArith.
 
 Open Scope bv_scope.
 
-Abbreviation word := (bv 64).
-Abbreviation reg := (bv 5).
+Notation word := (bv 64) (only parsing).
+Notation reg := (bv 5) (only parsing).
 
 (** Extract bits [hi..lo] (inclusive) of [w] as a bitvector of the
     appropriate width.  Callers pass the result width explicitly so the

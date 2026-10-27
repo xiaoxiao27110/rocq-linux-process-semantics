@@ -20,7 +20,7 @@ From Stdlib Require Import List Lia.
 Import ListNotations.
 Open Scope bv_scope.
 
-Abbreviation byte := (bv 8).
+Notation byte := (bv 8) (only parsing).
 
 (** Unsigned [<=] as a boolean (unsigned [<] is [bv_ltu]). *)
 Definition bv_leu {n} (a b : bv n) : bool :=
